@@ -14,7 +14,12 @@
   #include <SDL/SDL_mixer.h>
 #else
   #include "SDL_ttf.h"
+	#if defined(NXDK)
+  #define DISABLE_AUDIO 1
+	#else
+  #define DISABLE_AUDIO 0
   #include <SDL2/SDL_mixer.h>
+#endif
 #endif
 
 #define FRAME_TIME 19
@@ -153,11 +158,13 @@ SDL_Texture *runBubble;
 SDL_Texture *heroText;
 SDL_Texture *extraBulletText;
 /*sounds */
+#if !defined(DISABLE_AUDIO)
 Mix_Chunk *hitSound;
 Mix_Chunk *destroySound;
 Mix_Chunk *extraSound;
 Mix_Chunk *laserSound;
 Mix_Chunk *gameMusic;
+#endif
 /* fonts */
 TTF_Font *font20;
 TTF_Font *font42;
@@ -321,11 +328,13 @@ void setZombieTextTexture(ENEMY *block) {
   SDL_FreeSurface(textSurface);
 }
 
+#if !defined(DISABLE_AUDIO)
 void playSound(Mix_Chunk* sound) {
   if(gSoundCondition) {
     Mix_PlayChannel(-1, sound, 0);
   }
 }
+#endif
 
 void reflectX(OBJECT *bullet, ENEMY *block, int movingRight) {
   bullet->stepX *= -1;
@@ -351,11 +360,15 @@ void damage(int row, int column) {
       }
     }
     b->time = allDead ? -501 : -99;
+#if !defined(DISABLE_AUDIO)
     playSound(destroySound);
+#endif
   }
   else {
     b->time = 1;
+#if !defined(DISABLE_AUDIO)
     playSound(hitSound);
+#endif
   }
   b->frame = 2;
   updatePoints(1);
@@ -539,9 +552,10 @@ int init() {
   srand(time(NULL));
 
   // Initialize audio
+#if !defined(DISABLE_AUDIO)
   Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 4096);
   Mix_AllocateChannels(16);
-
+#endif
   // Initialize font library
   if (TTF_Init() == -1) {
     printf("TTF unable to initialize! Error: %s\n", TTF_GetError());
@@ -606,6 +620,7 @@ SDL_Texture *loadTexture(char *path) {
   return newTexture;
 }
 
+#if !defined(DISABLE_AUDIO)
 Mix_Chunk *loadWAV(const char *filepath) {
   SDL_RWops *fileData = SDL_RWFromFile(filepath, "rb");
   if(!fileData) {
@@ -622,6 +637,7 @@ Mix_Chunk *loadWAV(const char *filepath) {
   
   return chunk;
 }
+#endif
 
 void loadMedia() {
   /* Load menu surface */
@@ -651,12 +667,13 @@ void loadMedia() {
   zombieMouth = loadTexture("assets/images/zombie-mouth-2.png");
 
   /*load sounds */
+#if !defined(DISABLE_AUDIO)
   hitSound = loadWAV("assets/sounds/hit.ogg");
   destroySound = loadWAV("assets/sounds/destroy.ogg");
   laserSound = loadWAV("assets/sounds/laser.ogg");
   extraSound = loadWAV("assets/sounds/extra.ogg");
   gameMusic = loadWAV("assets/sounds/music.ogg");
-  
+  #endif
 
   /*load fonts*/
   // TTF_Font *font;
@@ -827,6 +844,7 @@ int clickButton(SDL_Event e, SDL_Rect button) {
          mouseY >= button.y && mouseY <= button.y + button.h;
 }
 
+#if !defined(DISABLE_AUDIO)
 void playMusic() {
   if (gMusicCondition) {
     if (Mix_Paused(1)) {
@@ -836,6 +854,7 @@ void playMusic() {
     }
   }
 }
+#endif
 
 void setAngle() {
   double maxRadians = 0;
@@ -949,7 +968,9 @@ void handleDown(){
       gPausedGame = 1;
       showPaused();
       if (gMusicCondition) {
+#if !defined(DISABLE_AUDIO)
         Mix_Pause(1);
+#endif
       }
     }
     else if (gameFrame == shotInterval || gameFrame < 3) {
@@ -984,10 +1005,14 @@ void handleMotion(){
     scrnText = NULL;
     if (gPausedGame) {
       gPausedGame = 0;
+#if !defined(DISABLE_AUDIO)
       playMusic();
+#endif
     } else if (hasGameStarted == 0) {
       hasGameStarted = 1;
+#if !defined(DISABLE_AUDIO)
       playMusic();
+#endif
     }
   } else if (hasGameStarted == 0 || (hasGameStarted == 1 && gPausedGame)) {
     if (clickButton(e, recordsDstRect)) {
@@ -1131,7 +1156,9 @@ void tick() {
       }
       if (block[i][j].time == -399) {
         block[i][j].frame = 3;
+#if !defined(DISABLE_AUDIO)
         playSound(extraSound);
+#endif
       }
       else if (block[i][j].time == -1) {
         SDL_DestroyTexture(block[i][j].textTexture);
@@ -1169,7 +1196,9 @@ void tick() {
           bullet->stepY = bulletY;
           bullet->stepX = bulletX;
           updateBullets(bulletsLoaded - gameFrame / BULLET_GAP);
+#if !defined(DISABLE_AUDIO)
           playSound(laserSound);
+#endif
         }
         gameFrame++;
       }
@@ -1192,7 +1221,9 @@ void tick() {
               #if __EMSCRIPTEN__
                 Mix_HaltChannel(-1);
               #else
+		#if !defined(DISABLE_AUDIO)
                 Mix_FadeOutChannel(1, 999 * 2);
+		#endif
               #endif
               setRank();
               break;
