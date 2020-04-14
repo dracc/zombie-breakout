@@ -98,6 +98,13 @@ typedef struct _RECORD {
   char name[30];
 } RECORD;
 
+// Set mouse speed to 10 pixels per second at 60FPS
+const float mouse_speed = 10.0f / 60.0f;
+
+// Prepare a circular deadzone; 10% inner and 5% outer deadzone
+const float deadzone_inner = 0.1f;
+const float deadzone_outer = 1.0f - 0.05f;
+
 int gQuit = 0;
 int mouseSupport = 1;
 int gPoints;
@@ -182,6 +189,7 @@ SDL_Texture *mscOffText;
 // The color of the font
 SDL_Color textColor = {255, 255, 255, 255};
 
+SDL_GameController *controller;
 
 OBJECT *bullet;
 OBJECT hero;
@@ -567,7 +575,7 @@ int init() {
   }
 
   // Initialize SDL
-  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
+  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) < 0) {
     printf("SDL could not initialize! SDL Error: %s\n", SDL_GetError());
     return 0;
   }
@@ -597,6 +605,11 @@ int init() {
     return 0;
   }
 
+  controller = SDL_GameControllerOpen(0);
+  if (controller == NULL) {
+      printf("SDL_GameController could not be opened!\n");
+      return 0;
+  }
   return 1;
 }
 
@@ -966,6 +979,53 @@ void interpolateMouse() {
   mouseY = (float)(GAME_H) * y;
 }
 
+float clamp(float value, float min, float max) {
+    if (value > min) {
+        if (value < max) {
+            return value;
+        } else {
+            return max;
+        }
+    }
+    return min;
+}
+
+void interpolateController(Uint8 xaxis, Uint8 yaxis) {
+    // Get axis position in [-1.0;+1.0]
+    float stick_x = SDL_GameControllerGetAxis(controller, xaxis) / (float)0x8000;
+    float stick_y = SDL_GameControllerGetAxis(controller, yaxis) / (float)0x8000;
+
+    // Get squared axis distance to center, which should be [0.0;sqrt(2.0)]
+    float stick_distance = sqrtf(stick_x*stick_x + stick_y*stick_y);
+
+    // Do mouse movement while stick is not in center
+    if (stick_distance > (deadzone_inner*deadzone_inner)) {
+
+        // Get non-squared axis distance to center, which should be [deadzone_inner;sqrt(2.0)]
+        stick_distance = sqrtf(stick_distance);
+
+        // Normalize stick direction
+        stick_x /= stick_distance;
+        stick_y /= stick_distance;
+
+        // Discard outer region to get [deadzone_inner;deadzone_outer]
+        if (stick_distance > deadzone_outer) {
+            stick_distance = deadzone_outer;
+        }
+
+        // Get distance without deadzones by going from [deadzone_inner;deadzone_outer] to [0.0;1.0]
+        stick_distance = (stick_distance - deadzone_inner) / (deadzone_outer - deadzone_inner);
+
+        // Do relative mouse movement
+        mouseX += stick_x * stick_distance * mouse_speed;
+        mouseY += stick_y * stick_distance * mouse_speed;
+
+        // Clamp mouse cursor to visible region
+        mouseX = clamp(mouseX, 0, WINDOW_W);
+        mouseY = clamp(mouseY, 0, WINDOW_H);
+    }
+}
+
 void handleDown(){
   if (gPausedGame == 0 && hasGameStarted) {
     if (clickButton(e, dstPauseButton)) {
@@ -1069,6 +1129,15 @@ void handleButtons() {
         setAngle();
       }
       break;
+  case SDL_CONTROLLERAXISMOTION:
+      if (e.caxis.axis == SDL_CONTROLLER_AXIS_LEFTX || e.caxis.axis == SDL_CONTROLLER_AXIS_LEFTY) {
+          interpolateController(SDL_CONTROLLER_AXIS_LEFTX, SDL_CONTROLLER_AXIS_LEFTY);
+          setAngle();
+      }
+      if (e.caxis.axis == SDL_CONTROLLER_AXIS_RIGHTX || e.caxis.axis == SDL_CONTROLLER_AXIS_RIGHTY) {
+          interpolateController(SDL_CONTROLLER_AXIS_RIGHTX, SDL_CONTROLLER_AXIS_RIGHTY);
+          handleMotion();
+      }
   }
 }
 
@@ -1409,7 +1478,6 @@ void loop() {
 #else
   /* Starts game main loop */
   while (!gQuit) {
-    SDL_Delay(SDL_DELAY);
     tick();
   }
   quit();
